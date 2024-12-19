@@ -1,13 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const { 
+import express from 'express';
+import { 
   createWish, 
   getUserWishes, 
   getCurrentRound,
   fulfillWishes 
-} = require('../controllers/wishController');
-const authMiddleware = require('../middleware/authMiddleware');
-const { validateApiKey } = require('../middleware/apiKeyMiddleware');
+} from '../controllers/wishController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+import { validateApiKey } from '../middleware/apiKeyMiddleware.js';
+
+const router = express.Router();
 
 // Public routes
 router.get('/current-round', getCurrentRound);
@@ -19,4 +20,4 @@ router.get('/my-wishes', authMiddleware, getUserWishes);
 // AI Service route (protected with API key)
 router.post('/fulfill', validateApiKey, fulfillWishes);
 
-module.exports = router;
+export { router };

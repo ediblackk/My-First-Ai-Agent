@@ -1,0 +1,174 @@
+name: Storybook Deployment
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'vite-project/src/**'
+      - 'vite-project/.storybook/**'
+      - 'vite-project/package.json'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'vite-project/src/**'
+      - 'vite-project/.storybook/**'
+      - 'vite-project/package.json'
+
+jobs:
+  storybook:
+    name: Build & Deploy Storybook
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'vite-project/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: vite-project
+        run: npm ci
+
+      - name: Cache Storybook build
+        uses: actions/cache@v3
+        with:
+          path: |
+            vite-project/storybook-static
+            vite-project/node_modules/.cache/storybook
+          key: storybook-${{ runner.os }}-${{ hashFiles('vite-project/src/**', 'vite-project/.storybook/**') }}
+          restore-keys: |
+            storybook-${{ runner.os }}-
+
+      - name: Build Storybook
+        working-directory: vite-project
+        run: npm run build-storybook
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+
+      - name: Run Storybook tests
+        working-directory: vite-project
+        run: |
+          npx concurrently -k -s first -n "SB,TEST" \
+            "npx http-server storybook-static --port 6006 --silent" \
+            "npx wait-on tcp:6006 && npm run test-storybook"
+
+      - name: Generate coverage report
+        working-directory: vite-project
+        run: npm run test-storybook:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: storybook-coverage
+          path: vite-project/coverage-storybook
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: vite-project/storybook-static
+          target-folder: storybook
+          clean: true
+
+      - name: Generate Storybook stats
+        working-directory: vite-project
+        run: |
+          echo "## Storybook Stats" > storybook-stats.md
+          echo "### Components" >> storybook-stats.md
+          find src -name "*.stories.@(js|jsx|ts|tsx)" | wc -l >> storybook-stats.md
+          echo "### Stories" >> storybook-stats.md
+          grep -r "export const" src --include="*.stories.@(js|jsx|ts|tsx)" | wc -l >> storybook-stats.md
+          echo "### Coverage" >> storybook-stats.md
+          cat coverage-storybook/coverage-summary.json | jq '.total.statements.pct' >> storybook-stats.md
+
+      - name: Create/Update Stats Comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const stats = fs.readFileSync('vite-project/storybook-stats.md', 'utf8');
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            
+            const statsComment = comments.find(comment => 
+              comment.body.includes('## Storybook Stats')
+            );
+            
+            if (statsComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: statsComment.id,
+                body: stats
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: stats
+              });
+            }
+
+      - name: Check coverage threshold
+        working-directory: vite-project
+        run: |
+          COVERAGE=$(cat coverage-storybook/coverage-summary.json | jq '.total.statements.pct')
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "Coverage below threshold: $COVERAGE%"
+            exit 1
+          fi
+
+      - name: Notify on Success
+        if: success()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const message = `
+            ✅ Storybook deployment successful!
+            
+            View documentation: https://${context.repo.owner}.github.io/${context.repo.repo}/storybook
+            `;
+            
+            if (context.eventName === 'pull_request') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
+            }
+
+      - name: Notify on Failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const message = `
+            ❌ Storybook deployment failed!
+            
+            Please check the workflow logs for details.
+            `;
+            
+            if (context.eventName === 'pull_request') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
+            }

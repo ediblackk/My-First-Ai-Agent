@@ -1,0 +1,223 @@
+name: Frontend Quality Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'vite-project/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'vite-project/**'
+
+jobs:
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'vite-project/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: vite-project
+        run: npm ci
+
+      - name: Build project
+        working-directory: vite-project
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:3001
+
+      - name: Run Lighthouse CI
+        working-directory: vite-project
+        run: |
+          npm install -g @lhci/cli@0.11.x
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 7
+
+  bundle-analysis:
+    name: Bundle Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'vite-project/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: vite-project
+        run: npm ci
+
+      - name: Build with source maps
+        working-directory: vite-project
+        run: npm run build -- --sourcemap
+        env:
+          VITE_API_URL: http://localhost:3001
+
+      - name: Analyze bundle
+        working-directory: vite-project
+        run: npx source-map-explorer 'dist/**/*.js' --html bundle-analysis.html
+
+      - name: Upload bundle analysis
+        uses: actions/upload-artifact@v3
+        with:
+          name: bundle-analysis
+          path: vite-project/bundle-analysis.html
+          retention-days: 7
+
+  accessibility:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'vite-project/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: vite-project
+        run: npm ci
+
+      - name: Build project
+        working-directory: vite-project
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:3001
+
+      - name: Install pa11y
+        run: npm install -g pa11y-ci
+
+      - name: Run accessibility tests
+        working-directory: vite-project
+        run: |
+          npm run preview &
+          sleep 5
+          pa11y-ci --config .pa11yci http://localhost:4173
+
+      - name: Upload accessibility reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: accessibility-reports
+          path: vite-project/.pa11y-results
+          retention-days: 7
+
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'vite-project/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: vite-project
+        run: npm ci
+
+      - name: Build project
+        working-directory: vite-project
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:3001
+
+      - name: Run performance tests
+        working-directory: vite-project
+        run: |
+          npm run preview &
+          sleep 5
+          npx puppeteer-loadtest \
+            --url http://localhost:4173 \
+            --timeout 30 \
+            --connections 50 \
+            --file performance-test-results.json
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results
+          path: vite-project/performance-test-results.json
+          retention-days: 7
+
+  report:
+    name: Generate Quality Report
+    needs: [lighthouse, bundle-analysis, accessibility, performance]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Generate combined report
+        run: |
+          echo "# Frontend Quality Report" > quality-report.md
+          echo "## Lighthouse Scores" >> quality-report.md
+          cat artifacts/lighthouse-reports/manifest.json | jq -r '.[] | "- \(.url): Performance: \(.summary.performance*100)%, Accessibility: \(.summary.accessibility*100)%"' >> quality-report.md
+          
+          echo "## Bundle Size" >> quality-report.md
+          cat artifacts/bundle-analysis/bundle-analysis.html | grep -o 'Total Size: [0-9.]* KB' >> quality-report.md
+          
+          echo "## Accessibility Issues" >> quality-report.md
+          cat artifacts/accessibility-reports/results.json | jq -r '.[] | select(.type=="error") | "- \(.message)"' >> quality-report.md
+          
+          echo "## Performance Test Results" >> quality-report.md
+          cat artifacts/performance-results/performance-test-results.json | jq -r '"- Average Response Time: \(.avgResponseTime)ms\n- Max Response Time: \(.maxResponseTime)ms\n- Requests/Second: \(.requestsPerSecond)"' >> quality-report.md
+
+      - name: Create Issue
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('quality-report.md', 'utf8');
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '📊 Frontend Quality Issues Found',
+              body: report,
+              labels: ['quality', 'frontend']
+            });
+
+      - name: Upload combined report
+        uses: actions/upload-artifact@v3
+        with:
+          name: quality-report
+          path: quality-report.md
+          retention-days: 30

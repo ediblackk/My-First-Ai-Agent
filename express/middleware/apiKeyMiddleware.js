@@ -1,4 +1,4 @@
-exports.validateApiKey = (req, res, next) => {
+export const validateApiKey = (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
 
   if (!apiKey) {

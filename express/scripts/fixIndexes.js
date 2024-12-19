@@ -1,43 +1,37 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import User from '../models/user.js';
+import Wish from '../models/wish.js';
 
-async function fixIndexes() {
+dotenv.config();
+
+const fixIndexes = async () => {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/make-a-wish');
+    console.log('Connecting to MongoDB...');
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/wishdb');
     console.log('Connected to MongoDB');
 
-    // Get the users collection
-    const db = mongoose.connection.db;
-    const collection = db.collection('users');
+    // Drop existing collections
+    console.log('Dropping existing collections...');
+    await mongoose.connection.db.dropDatabase();
+    console.log('Database dropped');
 
-    // List all indexes
-    console.log('\nCurrent indexes:');
-    const indexes = await collection.indexes();
-    console.log(indexes);
+    // Create indexes for User model
+    console.log('Creating User indexes...');
+    await User.createIndexes();
+    console.log('User indexes created');
 
-    // Drop all indexes except _id
-    console.log('\nDropping all indexes...');
-    await collection.dropIndexes();
-    console.log('All indexes dropped');
+    // Create indexes for Wish model
+    console.log('Creating Wish indexes...');
+    await Wish.createIndexes();
+    console.log('Wish indexes created');
 
-    // Create new indexes
-    console.log('\nCreating new indexes...');
-    await collection.createIndex({ publicKey: 1 }, { unique: true });
-    await collection.createIndex({ createdAt: -1 });
-    console.log('New indexes created');
-
-    // Verify new indexes
-    console.log('\nNew indexes:');
-    const newIndexes = await collection.indexes();
-    console.log(newIndexes);
-
+    console.log('All indexes created successfully');
+    process.exit(0);
   } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    await mongoose.connection.close();
-    console.log('\nDisconnected from MongoDB');
+    console.error('Error fixing indexes:', error);
+    process.exit(1);
   }
-}
+};
 
 fixIndexes();

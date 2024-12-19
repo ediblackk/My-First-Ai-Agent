@@ -1,0 +1,152 @@
+{
+  "defaults": {
+    "timeout": 30000,
+    "wait": 1000,
+    "standard": "WCAG2AA",
+    "ignore": [
+      "WCAG2AA.Principle1.Guideline1_4.1_4_3.G18.Fail"
+    ],
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "chromeLaunchConfig": {
+      "args": [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ]
+    },
+    "actions": [
+      "screen capture screenshots/before-scroll.png",
+      "wait for element #app to be visible",
+      "wait for element #main-content to be visible",
+      "screen capture screenshots/after-content-load.png"
+    ],
+    "reporters": [
+      "cli",
+      ["json", { "fileName": ".pa11y-results/results.json" }],
+      ["html", { "fileName": ".pa11y-results/report.html" }]
+    ]
+  },
+  "urls": [
+    {
+      "url": "http://localhost:4173",
+      "actions": [
+        "wait for element #app to be visible",
+        "screen capture screenshots/home.png"
+      ],
+      "screenCapture": "screenshots/home.png"
+    },
+    {
+      "url": "http://localhost:4173/wishes",
+      "actions": [
+        "wait for element #app to be visible",
+        "wait for element #wishes-list to be visible",
+        "screen capture screenshots/wishes.png",
+        "click element #create-wish-button",
+        "wait for element #wish-form to be visible",
+        "screen capture screenshots/create-wish.png"
+      ],
+      "screenCapture": "screenshots/wishes.png"
+    },
+    {
+      "url": "http://localhost:4173/admin",
+      "actions": [
+        "wait for element #app to be visible",
+        "wait for element #admin-dashboard to be visible",
+        "screen capture screenshots/admin.png",
+        "click element #stats-tab",
+        "wait for element #stats-content to be visible",
+        "screen capture screenshots/admin-stats.png",
+        "click element #users-tab",
+        "wait for element #users-content to be visible",
+        "screen capture screenshots/admin-users.png",
+        "click element #config-tab",
+        "wait for element #config-content to be visible",
+        "screen capture screenshots/admin-config.png"
+      ],
+      "screenCapture": "screenshots/admin.png"
+    }
+  ],
+  "hideElements": [
+    ".loading-spinner",
+    ".notification-toast",
+    "[aria-live='polite']"
+  ],
+  "rules": [
+    {
+      "type": "notice",
+      "code": "WCAG2AA.Principle1.Guideline1_4.1_4_3.G18.BgImage"
+    },
+    {
+      "type": "error",
+      "code": "WCAG2AA.Principle1.Guideline1_3.1_3_1.H42.2"
+    },
+    {
+      "type": "error",
+      "code": "WCAG2AA.Principle1.Guideline1_3.1_3_1.H48"
+    },
+    {
+      "type": "error",
+      "code": "WCAG2AA.Principle2.Guideline2_4.2_4_1.H64.1"
+    },
+    {
+      "type": "error",
+      "code": "WCAG2AA.Principle2.Guideline2_4.2_4_2.H25.1.NoTitleEl"
+    },
+    {
+      "type": "error",
+      "code": "WCAG2AA.Principle1.Guideline1_3.1_3_1.H48.2"
+    }
+  ],
+  "threshold": {
+    "errors": 0,
+    "warnings": 2,
+    "notices": 5
+  },
+  "concurrency": 4,
+  "useIncognitoBrowserContext": true,
+  "chromeLaunchConfig": {
+    "args": [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-software-rasterizer"
+    ]
+  },
+  "actions": [
+    "set field #username to admin",
+    "set field #password to admin123",
+    "click element #login-button",
+    "wait for url to be http://localhost:4173/admin"
+  ],
+  "log": {
+    "debug": false,
+    "error": true,
+    "info": true
+  },
+  "screenCapture": ".pa11y-results/screenshots/${url.replace(/[^a-z0-9]/gi, '_')}.png",
+  "reporters": [
+    "cli",
+    ["json", { "fileName": ".pa11y-results/results.json" }],
+    ["html", { "fileName": ".pa11y-results/report.html" }],
+    ["junit", { "fileName": ".pa11y-results/junit.xml" }]
+  ],
+  "includeNotices": true,
+  "includeWarnings": true,
+  "wait": 1000,
+  "timeout": 30000,
+  "standard": "WCAG2AA",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "ignore": [
+    "WCAG2AA.Principle1.Guideline1_4.1_4_3.G18.Fail",
+    "WCAG2AA.Principle1.Guideline1_4.1_4_3.G145.Fail",
+    "WCAG2AA.Principle1.Guideline1_4.1_4_6.G17.Fail",
+    "WCAG2AA.Principle1.Guideline1_4.1_4_6.G18.Fail"
+  ]
+}

@@ -1,20 +1,19 @@
-const Wish = require('../models/wish');
-const Round = require('../models/round');
+import Wish from '../models/wish.js';
 
-exports.getLatestFulfilledWishes = async (req, res) => {
+export const getLatestFulfilledWishes = async (req, res) => {
   try {
-    const latestWishes = await Wish.find({ status: 'fulfilled' })
-      .sort({ fulfilledAt: -1 })
+    const latestWishes = await Wish.find({ status: 'completed' })
+      .sort({ updatedAt: -1 })
       .limit(5)
       .populate('user', 'walletAddress')
-      .select('content fulfillmentDetails fulfilledAt');
+      .select('content status credits updatedAt');
 
     const formattedWishes = latestWishes.map(wish => ({
       id: wish._id,
       content: wish.content.substring(0, 100) + (wish.content.length > 100 ? '...' : ''),
-      fulfillmentDetails: wish.fulfillmentDetails,
+      credits: wish.credits,
       walletAddress: wish.user.walletAddress.substring(0, 6) + '...',
-      fulfilledAt: wish.fulfilledAt
+      completedAt: wish.updatedAt
     }));
 
     res.json({
@@ -30,20 +29,20 @@ exports.getLatestFulfilledWishes = async (req, res) => {
   }
 };
 
-exports.getTopRewards = async (req, res) => {
+export const getTopRewards = async (req, res) => {
   try {
-    const topWishes = await Wish.find({ status: 'fulfilled' })
-      .sort({ 'fulfillmentDetails.rewardAmount': -1 })
+    const topWishes = await Wish.find({ status: 'completed' })
+      .sort({ credits: -1 })
       .limit(3)
       .populate('user', 'walletAddress')
-      .select('content fulfillmentDetails fulfilledAt');
+      .select('content credits updatedAt');
 
     const formattedTopWishes = topWishes.map(wish => ({
       id: wish._id,
       content: wish.content.substring(0, 100) + (wish.content.length > 100 ? '...' : ''),
-      rewardAmount: wish.fulfillmentDetails.rewardAmount,
+      credits: wish.credits,
       walletAddress: wish.user.walletAddress.substring(0, 6) + '...',
-      fulfilledAt: wish.fulfilledAt
+      completedAt: wish.updatedAt
     }));
 
     res.json({
@@ -59,36 +58,56 @@ exports.getTopRewards = async (req, res) => {
   }
 };
 
-exports.getRoundStatistics = async (req, res) => {
+export const getRoundStatistics = async (req, res) => {
   try {
-    const stats = await Round.aggregate([
-      { $match: { status: 'completed' } },
+    // Get overall stats from wishes
+    const stats = await Wish.aggregate([
       {
         $group: {
           _id: null,
-          totalRounds: { $sum: 1 },
-          totalWishesFulfilled: { $sum: { $size: '$fulfilledWishes' } },
-          averageWishesPerRound: { $avg: '$currentWishes' }
+          totalWishes: { $sum: 1 },
+          completedWishes: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'completed'] }, 1, 0]
+            }
+          },
+          totalCredits: { $sum: '$credits' }
         }
       }
     ]);
 
-    const currentRound = await Round.findOne({ 
-      status: { $in: ['active', 'pending'] } 
-    }).select('type currentWishes requiredWishes status');
+    // Get current round stats (pending wishes)
+    const currentRound = await Wish.aggregate([
+      {
+        $match: { status: 'pending' }
+      },
+      {
+        $group: {
+          _id: null,
+          currentWishes: { $sum: 1 },
+          totalCredits: { $sum: '$credits' }
+        }
+      }
+    ]);
 
     res.json({
       success: true,
       stats: stats[0] || {
-        totalRounds: 0,
-        totalWishesFulfilled: 0,
-        averageWishesPerRound: 0
+        totalWishes: 0,
+        completedWishes: 0,
+        totalCredits: 0
       },
-      currentRound: currentRound ? {
-        type: currentRound.type,
-        progress: Math.round((currentRound.currentWishes / currentRound.requiredWishes) * 100),
-        status: currentRound.status
-      } : null
+      currentRound: currentRound[0] ? {
+        type: 'normal',
+        currentWishes: currentRound[0].currentWishes,
+        totalCredits: currentRound[0].totalCredits,
+        status: 'active'
+      } : {
+        type: 'normal',
+        currentWishes: 0,
+        totalCredits: 0,
+        status: 'pending'
+      }
     });
   } catch (error) {
     console.error('Error fetching statistics:', error);

@@ -1,0 +1,181 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 0 * * *' # Rulare zilnică la miezul nopții
+
+jobs:
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    services:
+      sonarqube:
+        image: sonarqube:latest
+        ports:
+          - 9000:9000
+      
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install -g @owasp/dependency-check-cli
+          npm install -g gitleaks
+          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
+          unzip sonar-scanner-cli-4.7.0.2747-linux.zip
+          echo "${PWD}/sonar-scanner-4.7.0.2747-linux/bin" >> $GITHUB_PATH
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Wait for SonarQube
+        run: |
+          timeout 300 bash -c 'while [[ "$(curl -s -o /dev/null -w ''%{http_code}'' localhost:9000)" != "200" ]]; do sleep 5; done'
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/test
+
+      - name: NPM Audit
+        run: |
+          npm audit --json > reports/npm-audit.json || true
+          echo "NPM audit completed"
+
+      - name: OWASP Dependency Check
+        run: |
+          dependency-check \
+            --project "Wish Server" \
+            --scan "." \
+            --exclude "node_modules/**" \
+            --exclude "tests/**" \
+            --exclude "k6/**" \
+            --format "HTML" \
+            --format "JSON" \
+            --out "reports"
+
+      - name: Secrets Scanning
+        run: |
+          gitleaks detect \
+            --source "." \
+            --report-path "reports/secrets-report.json" \
+            --report-format json \
+            --no-git || true
+
+      - name: SonarQube Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner \
+            -Dsonar.host.url=http://localhost:9000 \
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.projectKey=wish-server \
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+            -Dsonar.working.directory=reports/sonar \
+            -Dsonar.sourceEncoding=UTF-8
+
+      - name: Setup ZAP
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+          target: 'http://localhost:3001'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+      - name: Generate Security Report
+        run: node scripts/security-scan.js
+        env:
+          SONAR_URL: http://localhost:9000
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          API_URL: http://localhost:3001
+
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: reports/
+          retention-days: 30
+
+      - name: Check Security Gates
+        run: |
+          CRITICAL=$(jq '.summary.vulnerabilities.critical' reports/security-report.json)
+          HIGH=$(jq '.summary.vulnerabilities.high' reports/security-report.json)
+          
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "❌ Security scan failed: Found critical or high vulnerabilities"
+            exit 1
+          fi
+
+      - name: Create Security Issue
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('reports/security-report.json', 'utf8'));
+            
+            const issueBody = `
+            # Security Scan Failed
+            
+            ## Summary
+            - Critical Vulnerabilities: ${report.summary.vulnerabilities.critical}
+            - High Vulnerabilities: ${report.summary.vulnerabilities.high}
+            - Medium Vulnerabilities: ${report.summary.vulnerabilities.medium}
+            - Low Vulnerabilities: ${report.summary.vulnerabilities.low}
+            
+            ## Recommendations
+            ${report.recommendations.join('\n')}
+            
+            ## Details
+            See attached security reports in workflow artifacts.
+            `;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Security Issues Found',
+              body: issueBody,
+              labels: ['security', 'high-priority']
+            });
+
+      - name: Notify on Success
+        if: success()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const message = `
+            ✅ Security scan completed successfully!
+            
+            See security reports in workflow artifacts for details.
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });

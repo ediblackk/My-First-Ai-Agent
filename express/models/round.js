@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const RoundSchema = new mongoose.Schema({
   type: {
@@ -109,4 +109,5 @@ RoundSchema.statics.findCurrentRound = function() {
   }).sort({ createdAt: -1 });
 };
 
-module.exports = mongoose.model('Round', RoundSchema);
+const Round = mongoose.model('Round', RoundSchema);
+export default Round;

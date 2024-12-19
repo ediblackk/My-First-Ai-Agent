@@ -1,0 +1,388 @@
+openapi: 3.0.0
+info:
+  title: Wish Server API
+  version: 1.0.0
+  description: API pentru aplicația de dorințe cu integrare AI
+  contact:
+    name: Development Team
+    email: dev@example.com
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.staging.example.com
+    description: Staging server
+  - url: https://api.example.com
+    description: Production server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    
+  schemas:
+    Wish:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "wish123"
+        content:
+          type: string
+          example: "Vreau să învăț programare"
+        status:
+          type: string
+          enum: [pending, completed, cancelled]
+        analysis:
+          type: object
+          properties:
+            complexity:
+              type: number
+              minimum: 1
+              maximum: 10
+            categories:
+              type: array
+              items:
+                type: string
+            challenges:
+              type: array
+              items:
+                type: string
+            suggestions:
+              type: array
+              items:
+                type: string
+        solution:
+          type: object
+          properties:
+            steps:
+              type: array
+              items:
+                type: object
+                properties:
+                  order:
+                    type: number
+                  description:
+                    type: string
+                  timeEstimate:
+                    type: string
+            timeline:
+              type: string
+            resources:
+              type: array
+              items:
+                type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+        publicKey:
+          type: string
+        credits:
+          type: number
+        activeWishes:
+          type: number
+        totalWishes:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+    
+    Config:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+    
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+paths:
+  /api/auth/verify:
+    post:
+      summary: Verifică și autentifică un wallet
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                publicKey:
+                  type: string
+      responses:
+        '200':
+          description: Autentificare reușită
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Autentificare eșuată
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/wishes:
+    get:
+      summary: Listează dorințele utilizatorului
+      tags:
+        - Wishes
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, completed, cancelled]
+      responses:
+        '200':
+          description: Lista de dorințe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wishes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Wish'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: number
+                      pages:
+                        type: number
+                      page:
+                        type: number
+                      limit:
+                        type: number
+    
+    post:
+      summary: Creează o dorință nouă
+      tags:
+        - Wishes
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Dorință creată
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wish:
+                    $ref: '#/components/schemas/Wish'
+
+  /api/wishes/{id}/status:
+    put:
+      summary: Actualizează statusul unei dorințe
+      tags:
+        - Wishes
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [completed, cancelled]
+      responses:
+        '200':
+          description: Status actualizat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wish:
+                    $ref: '#/components/schemas/Wish'
+
+  /api/admin/users:
+    get:
+      summary: Listează utilizatorii (Admin)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de utilizatori
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: number
+                      pages:
+                        type: number
+
+  /api/admin/config:
+    get:
+      summary: Listează configurările (Admin)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de configurări
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Config'
+    
+    put:
+      summary: Actualizează o configurare (Admin)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key:
+                  type: string
+                value:
+                  type: string
+      responses:
+        '200':
+          description: Configurare actualizată
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    $ref: '#/components/schemas/Config'
+
+  /api/admin/stats/overview:
+    get:
+      summary: Obține statistici sistem (Admin)
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Statistici sistem
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stats:
+                    type: object
+                    properties:
+                      users:
+                        type: number
+                      activeUsers:
+                        type: number
+                      totalWishes:
+                        type: number
+                      completedWishes:
+                        type: number
+                      totalCredits:
+                        type: number
+
+tags:
+  - name: Authentication
+    description: Endpoint-uri pentru autentificare
+  - name: Wishes
+    description: Endpoint-uri pentru gestionarea dorințelor
+  - name: Admin
+    description: Endpoint-uri pentru administrare sistem
+
+security:
+  - BearerAuth: []

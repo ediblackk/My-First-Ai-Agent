@@ -1,194 +1,313 @@
-const Wish = require('../models/wish');
-const User = require('../models/user');
-const Round = require('../models/round');
+import Wish from '../models/wish.js';
+import User from '../models/user.js';
+import * as aiService from '../services/aiService.js';
 
-exports.createWish = async (req, res) => {
-  const { content } = req.body;
-  const userId = req.user.id;
-
+export const createWish = async (req, res) => {
   try {
-    // Create wish instance to calculate cost
-    const wish = new Wish({
-      user: userId,
-      content
-    });
+    const { content } = req.body;
+    const userId = req.user.id;
 
-    // Get user and check credits
+    // Verificare user
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        error: 'Utilizator negăsit'
+      });
     }
 
-    if (user.credits < wish.creditsCost) {
+    // Verificare credite
+    if (user.credits < 1) {
       return res.status(400).json({
-        message: 'Insufficient credits',
-        required: wish.creditsCost,
-        current: user.credits
+        success: false,
+        error: 'Credite insuficiente'
       });
     }
 
-    // Get active round or create new one
-    let activeRound = await Round.findCurrentRound();
-    if (!activeRound) {
-      activeRound = new Round({
-        type: 'fast',
-        requiredWishes: 50, // Initial requirement
-        status: 'pending'
-      });
-      await activeRound.save();
-    }
+    // Analiză dorință cu AI
+    console.log('Analyzing wish:', content);
+    const analysis = await aiService.analyzeWish(content);
+    console.log('Wish analysis:', analysis);
 
-    if (!activeRound.canAddWish()) {
-      return res.status(400).json({ message: 'Current round is not accepting wishes' });
-    }
+    // Generare soluție cu AI
+    console.log('Generating solution...');
+    const solution = await aiService.generateSolution(
+      content,
+      analysis.complexity,
+      analysis.challenges
+    );
+    console.log('Solution generated');
 
-    // Assign wish to round
-    wish.roundId = activeRound._id;
+    // Creare dorință
+    const wish = new Wish({
+      user: userId,
+      content,
+      analysis,
+      solution,
+      status: 'pending',
+      credits: 1 // Cost fix pentru o dorință
+    });
+
+    // Salvare dorință și actualizare user
     await wish.save();
-
-    // Update user
-    user.credits -= wish.creditsCost;
+    user.credits -= wish.credits;
+    user.activeWishes += 1;
     user.totalWishes += 1;
     user.lastWishAt = new Date();
     await user.save();
 
-    // Update round
-    activeRound.currentWishes += 1;
-    if (activeRound.isReadyToStart()) {
-      activeRound.status = 'active';
-    }
-    await activeRound.save();
-
-    res.status(201).json({
-      message: 'Wish created successfully',
-      wish,
-      remainingCredits: user.credits,
-      round: {
-        id: activeRound._id,
-        status: activeRound.status,
-        current: activeRound.currentWishes,
-        required: activeRound.requiredWishes,
-        progress: activeRound.progress
+    res.json({
+      success: true,
+      wish: {
+        id: wish._id,
+        content: wish.content,
+        analysis: wish.analysis,
+        solution: wish.solution,
+        status: wish.status,
+        credits: wish.credits,
+        createdAt: wish.createdAt
       }
     });
   } catch (error) {
     console.error('Error creating wish:', error);
-    res.status(500).json({ message: 'Error creating wish', error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Eroare la crearea dorinței'
+    });
   }
 };
 
-exports.getUserWishes = async (req, res) => {
-  const userId = req.user.id;
-
+export const getUserWishes = async (req, res) => {
   try {
-    const wishes = await Wish.find({ user: userId })
-      .sort({ createdAt: -1 })
-      .populate('roundId', 'status type startTime endTime');
+    const userId = req.user.id;
+    const { status, page = 1, limit = 10 } = req.query;
 
-    res.json(wishes);
+    const query = { user: userId };
+    if (status) {
+      query.status = status;
+    }
+
+    const wishes = await Wish.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .select('-__v');
+
+    const total = await Wish.countDocuments(query);
+
+    res.json({
+      success: true,
+      wishes,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (error) {
     console.error('Error fetching wishes:', error);
-    res.status(500).json({ message: 'Error fetching wishes', error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Eroare la obținerea dorințelor'
+    });
   }
 };
 
-exports.getCurrentRound = async (req, res) => {
+export const getWishDetails = async (req, res) => {
   try {
-    const round = await Round.findCurrentRound()
-      .populate('fulfilledWishes', 'content fulfillmentDetails');
+    const { wishId } = req.params;
+    const userId = req.user.id;
 
-    if (!round) {
-      return res.status(404).json({ message: 'No active round found' });
+    const wish = await Wish.findOne({
+      _id: wishId,
+      user: userId
+    }).select('-__v');
+
+    if (!wish) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dorință negăsită'
+      });
     }
 
     res.json({
-      id: round._id,
-      type: round.type,
-      status: round.status,
-      currentWishes: round.currentWishes,
-      requiredWishes: round.requiredWishes,
-      progress: round.progress,
-      startTime: round.startTime,
-      fulfilledWishes: round.fulfilledWishes
+      success: true,
+      wish
     });
   } catch (error) {
-    console.error('Error fetching round:', error);
-    res.status(500).json({ message: 'Error fetching round', error: error.message });
+    console.error('Error fetching wish details:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Eroare la obținerea detaliilor dorinței'
+    });
   }
 };
 
-exports.fulfillWishes = async (req, res) => {
-  const { roundId, fulfilledWishes } = req.body;
-
+export const updateWishStatus = async (req, res) => {
   try {
-    const round = await Round.findById(roundId);
-    if (!round || round.status !== 'active') {
-      return res.status(400).json({ message: 'Invalid round or round not active' });
-    }
+    const { wishId } = req.params;
+    const { status } = req.body;
+    const userId = req.user.id;
 
-    // Start AI processing
-    round.aiProcessingStarted = new Date();
-    await round.save();
-
-    // Update wishes and calculate total rewards
-    let totalRewards = 0;
-    for (const { wishId, fulfillmentDetails } of fulfilledWishes) {
-      const wish = await Wish.findById(wishId);
-      if (wish && wish.status === 'pending') {
-        wish.status = 'fulfilled';
-        wish.fulfillmentDetails = fulfillmentDetails;
-        await wish.save();
-
-        // Update user's fulfilled wishes count
-        await User.findByIdAndUpdate(wish.user, {
-          $inc: { fulfilledWishes: 1 }
-        });
-
-        round.fulfilledWishes.push(wishId);
-        totalRewards += fulfillmentDetails.rewardAmount || 0;
-      }
-    }
-
-    // Complete round and prepare next round
-    round.status = 'completed';
-    round.endTime = new Date();
-    round.totalRewardsDistributed = totalRewards;
-    round.aiProcessingCompleted = new Date();
-
-    // AI decides next round requirements based on current round performance
-    const fulfillmentRate = round.fulfilledWishes.length / round.currentWishes;
-    const nextRoundWishes = Math.max(20, Math.min(100, 
-      Math.floor(round.currentWishes * (fulfillmentRate + 0.5))
-    ));
-    
-    // Create next round
-    const newRound = new Round({
-      type: round.type === 'fast' ? 'daily' : 'fast',
-      requiredWishes: nextRoundWishes,
-      status: 'pending'
+    const wish = await Wish.findOne({
+      _id: wishId,
+      user: userId
     });
 
-    await Promise.all([
-      round.save(),
-      newRound.save()
+    if (!wish) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dorință negăsită'
+      });
+    }
+
+    // Actualizare status și user stats
+    const oldStatus = wish.status;
+    wish.status = status;
+    await wish.save();
+
+    const user = await User.findById(userId);
+    if (oldStatus === 'pending' && status === 'completed') {
+      user.activeWishes -= 1;
+    } else if (oldStatus === 'completed' && status === 'pending') {
+      user.activeWishes += 1;
+    }
+    await user.save();
+
+    res.json({
+      success: true,
+      wish: {
+        id: wish._id,
+        status: wish.status,
+        updatedAt: wish.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Error updating wish status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Eroare la actualizarea statusului dorinței'
+    });
+  }
+};
+
+export const deleteWish = async (req, res) => {
+  try {
+    const { wishId } = req.params;
+    const userId = req.user.id;
+
+    const wish = await Wish.findOne({
+      _id: wishId,
+      user: userId
+    });
+
+    if (!wish) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dorință negăsită'
+      });
+    }
+
+    // Actualizare user stats înainte de ștergere
+    if (wish.status === 'pending') {
+      const user = await User.findById(userId);
+      user.activeWishes -= 1;
+      await user.save();
+    }
+
+    await wish.remove();
+
+    res.json({
+      success: true,
+      message: 'Dorință ștearsă cu succes'
+    });
+  } catch (error) {
+    console.error('Error deleting wish:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Eroare la ștergerea dorinței'
+    });
+  }
+};
+
+export const getCurrentRound = async (req, res) => {
+  try {
+    const currentRound = await Wish.aggregate([
+      {
+        $match: { status: 'pending' }
+      },
+      {
+        $group: {
+          _id: null,
+          totalWishes: { $sum: 1 },
+          totalCredits: { $sum: '$credits' }
+        }
+      }
     ]);
 
     res.json({
-      message: 'Wishes fulfilled successfully',
-      completedRound: {
-        id: round._id,
-        totalWishes: round.currentWishes,
-        fulfilledWishes: round.fulfilledWishes.length,
-        totalRewards: totalRewards
-      },
-      newRound: {
-        id: newRound._id,
-        type: newRound.type,
-        requiredWishes: newRound.requiredWishes
+      success: true,
+      round: currentRound[0] || { totalWishes: 0, totalCredits: 0 }
+    });
+  } catch (error) {
+    console.error('Error fetching current round:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Eroare la obținerea rundei curente'
+    });
+  }
+};
+
+export const fulfillWishes = async (req, res) => {
+  try {
+    const { wishes } = req.body;
+    
+    if (!Array.isArray(wishes)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Lista de dorințe invalidă'
+      });
+    }
+
+    const results = await Promise.all(wishes.map(async (wishData) => {
+      const { wishId, solution } = wishData;
+      
+      const wish = await Wish.findById(wishId);
+      if (!wish) {
+        return {
+          wishId,
+          success: false,
+          error: 'Dorință negăsită'
+        };
       }
+
+      wish.solution = solution;
+      wish.status = 'completed';
+      await wish.save();
+
+      // Actualizare user stats
+      const user = await User.findById(wish.user);
+      if (user) {
+        user.activeWishes -= 1;
+        await user.save();
+      }
+
+      return {
+        wishId,
+        success: true
+      };
+    }));
+
+    res.json({
+      success: true,
+      results
     });
   } catch (error) {
     console.error('Error fulfilling wishes:', error);
-    res.status(500).json({ message: 'Error fulfilling wishes', error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Eroare la îndeplinirea dorințelor'
+    });
   }
 };

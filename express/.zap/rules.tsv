@@ -1,0 +1,119 @@
+# OWASP ZAP Security Rules
+# Format: <Rule ID>	<Status>	<Level>	<URL>
+# Status: IGNORE, WARN, FAIL, INFO
+# Level: LOW, MEDIUM, HIGH, CRITICAL
+
+# Authentication
+10010	FAIL	HIGH	.*	# Modern Web Application
+10011	FAIL	HIGH	.*	# Cookie Without Secure Flag
+10012	FAIL	HIGH	.*	# Password Autocomplete
+10015	FAIL	CRITICAL	.*	# Incomplete or No Cache-control Header
+10016	FAIL	HIGH	.*	# Web Browser XSS Protection Not Enabled
+10017	FAIL	HIGH	.*	# Cross-Domain JavaScript Source File Inclusion
+10019	FAIL	HIGH	.*	# Content-Type Header Missing
+10020	FAIL	HIGH	.*	# X-Frame-Options Header
+10021	FAIL	HIGH	.*	# X-Content-Type-Options Header Missing
+10023	FAIL	HIGH	.*	# Information Disclosure - Debug Error Messages
+10024	FAIL	HIGH	.*	# Information Disclosure - Sensitive Information in URL
+10025	FAIL	HIGH	.*	# Information Disclosure - Sensitive Information in HTTP Referrer Header
+10026	FAIL	HIGH	.*	# HTTP Parameter Override
+10027	FAIL	HIGH	.*	# Information Disclosure - Suspicious Comments
+10028	FAIL	HIGH	.*	# Open Redirect
+10029	FAIL	HIGH	.*	# Cookie Poisoning
+10030	FAIL	HIGH	.*	# User Controllable Charset
+10031	FAIL	HIGH	.*	# User Controllable HTML Element Attributes
+10032	FAIL	HIGH	.*	# Viewstate without MAC Signature
+10033	FAIL	HIGH	.*	# Directory Browsing
+10034	FAIL	HIGH	.*	# Heartbleed OpenSSL Vulnerability
+10035	FAIL	HIGH	.*	# Strict-Transport-Security Header
+10036	FAIL	HIGH	.*	# Server Leaks Information via "X-Powered-By" HTTP Response Header Field(s)
+10037	FAIL	HIGH	.*	# Server Leaks Version Information via "Server" HTTP Response Header Field
+10038	FAIL	HIGH	.*	# Content Security Policy (CSP) Header Not Set
+10039	FAIL	HIGH	.*	# X-Backend-Server Header Information Leak
+10040	FAIL	HIGH	.*	# Secure Pages Include Mixed Content
+10041	FAIL	HIGH	.*	# HTTP to HTTPS Insecure Transition in Form Post
+10042	FAIL	HIGH	.*	# HTTPS to HTTP Insecure Transition in Form Post
+10043	FAIL	HIGH	.*	# User Controllable JavaScript Event (XSS)
+10044	FAIL	HIGH	.*	# Big Redirect Detected (Potential Sensitive Information Leak)
+10045	FAIL	HIGH	.*	# Source Code Disclosure - /WEB-INF folder
+10046	FAIL	HIGH	.*	# Weak SSL/TLS Protocols
+10047	FAIL	HIGH	.*	# HTTPS Content Available via HTTP
+10048	FAIL	HIGH	.*	# Remote Code Execution - Shell Shock
+10049	FAIL	HIGH	.*	# Weak SSL/TLS Ciphers
+10050	FAIL	HIGH	.*	# Retrieved from Cache
+10051	FAIL	HIGH	.*	# Relative Path Confusion
+10052	FAIL	HIGH	.*	# X-ChromeLogger-Data Header Information Leak
+10053	FAIL	HIGH	.*	# Apache Range Header DoS (CVE-2011-3192)
+10054	FAIL	HIGH	.*	# Cookie without SameSite Attribute
+10055	FAIL	HIGH	.*	# CSP Scanner
+10056	FAIL	HIGH	.*	# X-Debug-Token Information Leak
+10057	FAIL	HIGH	.*	# Username Hash Found
+10058	FAIL	HIGH	.*	# GET for POST
+10059	FAIL	HIGH	.*	# X-AspNet-Version Response Header
+10060	FAIL	HIGH	.*	# ELMAH Information Leak
+10061	FAIL	HIGH	.*	# X-AspNetMvc-Version Response Header
+10062	FAIL	HIGH	.*	# PII Disclosure
+10063	FAIL	HIGH	.*	# Permissions Policy Header Not Set
+10095	FAIL	HIGH	.*	# Backup File Disclosure
+10096	FAIL	HIGH	.*	# Timestamp Disclosure
+10097	FAIL	HIGH	.*	# Hash Disclosure
+10098	FAIL	HIGH	.*	# Cross-Domain Misconfiguration
+10099	FAIL	HIGH	.*	# Source Code Disclosure
+
+# Input Validation
+40001	FAIL	HIGH	.*	# Cross Site Scripting (Reflected)
+40002	FAIL	HIGH	.*	# Cross Site Scripting (Persistent)
+40003	FAIL	HIGH	.*	# SQL Injection
+40004	FAIL	HIGH	.*	# SQL Injection - MySQL
+40005	FAIL	HIGH	.*	# SQL Injection - Oracle
+40006	FAIL	HIGH	.*	# SQL Injection - PostgreSQL
+40007	FAIL	HIGH	.*	# SQL Injection - MsSQL
+40008	FAIL	HIGH	.*	# SQL Injection - SQLite
+40009	FAIL	HIGH	.*	# SQL Injection - Java
+40010	FAIL	HIGH	.*	# SQL Injection - Expression Language
+40011	FAIL	HIGH	.*	# XML External Entity Attack
+40012	FAIL	HIGH	.*	# Command Injection
+40013	FAIL	HIGH	.*	# Path Traversal
+40014	FAIL	HIGH	.*	# Cross Site Request Forgery
+40015	FAIL	HIGH	.*	# LDAP Injection
+40016	FAIL	HIGH	.*	# XPath Injection
+40017	FAIL	HIGH	.*	# Server Side Include
+40018	FAIL	HIGH	.*	# Script Active Scan Rules
+40019	FAIL	HIGH	.*	# Remote OS Command Injection
+40020	FAIL	HIGH	.*	# Remote File Inclusion
+40021	FAIL	HIGH	.*	# Possible Username Enumeration
+40022	FAIL	HIGH	.*	# Path Traversal
+40023	FAIL	HIGH	.*	# Java Serialization
+40024	FAIL	HIGH	.*	# HTTP Parameter Pollution
+40025	FAIL	HIGH	.*	# Proxy Disclosure
+40026	FAIL	HIGH	.*	# Padding Oracle
+40027	FAIL	HIGH	.*	# SOAP Action Spoofing
+40028	FAIL	HIGH	.*	# SOAP XML Injection
+40029	FAIL	HIGH	.*	# Server Side Template Injection
+40030	FAIL	HIGH	.*	# Insecure HTTP Method
+40031	FAIL	HIGH	.*	# HTTP Response Splitting
+40032	FAIL	HIGH	.*	# HTTP Parameter Tampering
+40033	FAIL	HIGH	.*	# Integer Overflow
+40034	FAIL	HIGH	.*	# Format String Error
+40035	FAIL	HIGH	.*	# XML Injection
+
+# Custom Rules for API Endpoints
+90001	FAIL	HIGH	^/api/auth/.*	# Authentication Endpoints
+90002	FAIL	HIGH	^/api/admin/.*	# Admin Endpoints
+90003	FAIL	HIGH	^/api/wishes/.*	# Wish Management Endpoints
+90004	FAIL	HIGH	^/api/users/.*	# User Management Endpoints
+
+# Rate Limiting
+100001	WARN	MEDIUM	.*	# Too Many Requests
+
+# API Security
+110001	FAIL	HIGH	.*	# Insecure Direct Object References
+110002	FAIL	HIGH	.*	# Missing Function Level Access Control
+110003	FAIL	HIGH	.*	# Security Misconfiguration
+110004	FAIL	HIGH	.*	# Unvalidated Redirects and Forwards
+110005	FAIL	HIGH	.*	# Insufficient Logging and Monitoring
+
+# Custom Exceptions
+# Format: IGNORE rules for specific cases where we accept the risk
+200001	IGNORE	LOW	^/api/health$	# Health Check Endpoint
+200002	IGNORE	LOW	^/api/metrics$	# Metrics Endpoint

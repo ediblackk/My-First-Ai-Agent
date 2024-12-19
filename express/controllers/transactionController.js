@@ -1,15 +1,15 @@
-const solanaWeb3 = require('@solana/web3.js');
-const { calculateCreditsForAmount, validateTransaction } = require('./rateController');
-const User = require('../models/user');
+import { PublicKey, Transaction, SystemProgram, Connection, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import { calculateCreditsForAmount, validateTransaction } from './rateController.js';
+import User from '../models/user.js';
 
 const validateSplitPayment = async (transaction, expectedTotal) => {
-  const prizePoolWallet = process.env.SOLANA_PRIZE_POOL_WALLET;
-  const adminWallet = process.env.SOLANA_ADMIN_WALLET;
+  const prizePoolWallet = process.env.PRIZE_POOL_WALLET;
+  const adminWallet = process.env.EXPENSE_WALLET;
   
   console.log('Validating split payment:', {
     prizePoolWallet,
     adminWallet,
-    expectedTotal: expectedTotal / solanaWeb3.LAMPORTS_PER_SOL,
+    expectedTotal: expectedTotal / LAMPORTS_PER_SOL,
   });
 
   // Find the prize pool and admin wallet indices in the accounts array
@@ -40,25 +40,25 @@ const validateSplitPayment = async (transaction, expectedTotal) => {
   const expectedAdmin = expectedTotal - expectedPrizePool; // Rest goes to admin
 
   console.log('Transfer details:', {
-    fee: totalFee / solanaWeb3.LAMPORTS_PER_SOL,
-    expectedTotal: expectedTotal / solanaWeb3.LAMPORTS_PER_SOL,
-    adjustedTotal: adjustedTotal / solanaWeb3.LAMPORTS_PER_SOL,
+    fee: totalFee / LAMPORTS_PER_SOL,
+    expectedTotal: expectedTotal / LAMPORTS_PER_SOL,
+    adjustedTotal: adjustedTotal / LAMPORTS_PER_SOL,
     prizePool: {
-      expected: expectedPrizePool / solanaWeb3.LAMPORTS_PER_SOL,
-      actual: prizePoolTransfer / solanaWeb3.LAMPORTS_PER_SOL
+      expected: expectedPrizePool / LAMPORTS_PER_SOL,
+      actual: prizePoolTransfer / LAMPORTS_PER_SOL
     },
     admin: {
-      expected: expectedAdmin / solanaWeb3.LAMPORTS_PER_SOL,
-      actual: adminTransfer / solanaWeb3.LAMPORTS_PER_SOL
+      expected: expectedAdmin / LAMPORTS_PER_SOL,
+      actual: adminTransfer / LAMPORTS_PER_SOL
     },
     total: {
-      expected: expectedTotal / solanaWeb3.LAMPORTS_PER_SOL,
-      actual: (prizePoolTransfer + adminTransfer) / solanaWeb3.LAMPORTS_PER_SOL
+      expected: expectedTotal / LAMPORTS_PER_SOL,
+      actual: (prizePoolTransfer + adminTransfer) / LAMPORTS_PER_SOL
     }
   });
 
   // Use a larger tolerance to account for fees and rounding
-  const tolerance = 0.01 * solanaWeb3.LAMPORTS_PER_SOL; // 0.01 SOL tolerance
+  const tolerance = 0.01 * LAMPORTS_PER_SOL; // 0.01 SOL tolerance
   
   // Check if transfers are within tolerance
   const isPrizePoolCorrect = Math.abs(prizePoolTransfer - expectedPrizePool) <= tolerance;
@@ -68,24 +68,24 @@ const validateSplitPayment = async (transaction, expectedTotal) => {
   if (!isPrizePoolCorrect || !isAdminCorrect || !isTotalCorrect) {
     console.error('Transfer validation details:', {
       prizePool: {
-        expected: expectedPrizePool / solanaWeb3.LAMPORTS_PER_SOL,
-        actual: prizePoolTransfer / solanaWeb3.LAMPORTS_PER_SOL,
-        difference: Math.abs(prizePoolTransfer - expectedPrizePool) / solanaWeb3.LAMPORTS_PER_SOL,
+        expected: expectedPrizePool / LAMPORTS_PER_SOL,
+        actual: prizePoolTransfer / LAMPORTS_PER_SOL,
+        difference: Math.abs(prizePoolTransfer - expectedPrizePool) / LAMPORTS_PER_SOL,
         withinTolerance: isPrizePoolCorrect
       },
       admin: {
-        expected: expectedAdmin / solanaWeb3.LAMPORTS_PER_SOL,
-        actual: adminTransfer / solanaWeb3.LAMPORTS_PER_SOL,
-        difference: Math.abs(adminTransfer - expectedAdmin) / solanaWeb3.LAMPORTS_PER_SOL,
+        expected: expectedAdmin / LAMPORTS_PER_SOL,
+        actual: adminTransfer / LAMPORTS_PER_SOL,
+        difference: Math.abs(adminTransfer - expectedAdmin) / LAMPORTS_PER_SOL,
         withinTolerance: isAdminCorrect
       },
       total: {
-        expected: expectedTotal / solanaWeb3.LAMPORTS_PER_SOL,
-        actual: (prizePoolTransfer + adminTransfer) / solanaWeb3.LAMPORTS_PER_SOL,
-        difference: Math.abs((prizePoolTransfer + adminTransfer) - expectedTotal) / solanaWeb3.LAMPORTS_PER_SOL,
+        expected: expectedTotal / LAMPORTS_PER_SOL,
+        actual: (prizePoolTransfer + adminTransfer) / LAMPORTS_PER_SOL,
+        difference: Math.abs((prizePoolTransfer + adminTransfer) - expectedTotal) / LAMPORTS_PER_SOL,
         withinTolerance: isTotalCorrect
       },
-      tolerance: tolerance / solanaWeb3.LAMPORTS_PER_SOL
+      tolerance: tolerance / LAMPORTS_PER_SOL
     });
     
     // Return success anyway since funds were transferred
@@ -96,7 +96,7 @@ const validateSplitPayment = async (transaction, expectedTotal) => {
   return true;
 };
 
-exports.createTransaction = async (req, res) => {
+export const createTransaction = async (req, res) => {
   const { amount, publicKey } = req.body;
 
   if (!amount || !publicKey || isNaN(amount) || parseFloat(amount) <= 0) {
@@ -109,7 +109,7 @@ exports.createTransaction = async (req, res) => {
   try {
     // Validate publicKey format
     try {
-      new solanaWeb3.PublicKey(publicKey);
+      new PublicKey(publicKey);
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -117,13 +117,13 @@ exports.createTransaction = async (req, res) => {
       });
     }
 
-    const connection = new solanaWeb3.Connection(
-      process.env.SOLANA_RPC_URL || solanaWeb3.clusterApiUrl('devnet'),
+    const connection = new Connection(
+      process.env.SOLANA_RPC_URL || clusterApiUrl('devnet'),
       'confirmed'
     );
 
     // Convert SOL amount to lamports
-    const lamports = Math.floor(parseFloat(amount) * solanaWeb3.LAMPORTS_PER_SOL);
+    const lamports = Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL);
     
     // Calculate split based on environment variables
     const prizePoolPercentage = parseInt(process.env.PRIZE_POOL_PERCENTAGE);
@@ -143,22 +143,22 @@ exports.createTransaction = async (req, res) => {
     const expectedCredits = await calculateCreditsForAmount(parseFloat(amount));
 
     // Create transaction
-    const transaction = new solanaWeb3.Transaction();
+    const transaction = new Transaction();
 
     // Add transfer to prize pool wallet
     transaction.add(
-      solanaWeb3.SystemProgram.transfer({
-        fromPubkey: new solanaWeb3.PublicKey(publicKey),
-        toPubkey: new solanaWeb3.PublicKey(process.env.SOLANA_PRIZE_POOL_WALLET),
+      SystemProgram.transfer({
+        fromPubkey: new PublicKey(publicKey),
+        toPubkey: new PublicKey(process.env.PRIZE_POOL_WALLET),
         lamports: prizePoolAmount
       })
     );
 
     // Add transfer to admin wallet
     transaction.add(
-      solanaWeb3.SystemProgram.transfer({
-        fromPubkey: new solanaWeb3.PublicKey(publicKey),
-        toPubkey: new solanaWeb3.PublicKey(process.env.SOLANA_ADMIN_WALLET),
+      SystemProgram.transfer({
+        fromPubkey: new PublicKey(publicKey),
+        toPubkey: new PublicKey(process.env.EXPENSE_WALLET),
         lamports: adminAmount
       })
     );
@@ -166,7 +166,7 @@ exports.createTransaction = async (req, res) => {
     // Get latest blockhash
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
-    transaction.feePayer = new solanaWeb3.PublicKey(publicKey);
+    transaction.feePayer = new PublicKey(publicKey);
 
     // Serialize the transaction
     const serializedTransaction = transaction.serialize({
@@ -179,9 +179,9 @@ exports.createTransaction = async (req, res) => {
       success: true,
       transaction: serializedTransaction.toString('base64'),
       splits: {
-        prizePool: prizePoolAmount / solanaWeb3.LAMPORTS_PER_SOL,
-        admin: adminAmount / solanaWeb3.LAMPORTS_PER_SOL,
-        total: lamports / solanaWeb3.LAMPORTS_PER_SOL
+        prizePool: prizePoolAmount / LAMPORTS_PER_SOL,
+        admin: adminAmount / LAMPORTS_PER_SOL,
+        total: lamports / LAMPORTS_PER_SOL
       },
       expectedCredits
     });
@@ -195,7 +195,7 @@ exports.createTransaction = async (req, res) => {
   }
 };
 
-exports.validateTransfer = async (req, res) => {
+export const validateTransfer = async (req, res) => {
   const { publicKey, signature } = req.body;
   
   if (!publicKey || !signature) {
@@ -209,7 +209,7 @@ exports.validateTransfer = async (req, res) => {
     // Validate publicKey format
     let validatedKey;
     try {
-      validatedKey = new solanaWeb3.PublicKey(publicKey).toString();
+      validatedKey = new PublicKey(publicKey).toString();
     } catch (error) {
       return res.status(400).json({
         success: false,
@@ -220,8 +220,8 @@ exports.validateTransfer = async (req, res) => {
     // Check for duplicate transactions
     validateTransaction(signature);
 
-    const connection = new solanaWeb3.Connection(
-      process.env.SOLANA_RPC_URL || solanaWeb3.clusterApiUrl('devnet'),
+    const connection = new Connection(
+      process.env.SOLANA_RPC_URL || clusterApiUrl('devnet'),
       'confirmed'
     );
 
@@ -241,62 +241,50 @@ exports.validateTransfer = async (req, res) => {
 
     console.log('Transaction found:', {
       signature,
-      fee: transaction.meta.fee / solanaWeb3.LAMPORTS_PER_SOL,
+      fee: transaction.meta.fee / LAMPORTS_PER_SOL,
       accounts: transaction.transaction.message.accountKeys.map(acc => acc.toString())
     });
 
     // Get total amount transferred
     const totalAmount = Math.abs(transaction.meta.postBalances[0] - transaction.meta.preBalances[0]) - transaction.meta.fee;
-    console.log('Total amount transferred (minus fees):', totalAmount / solanaWeb3.LAMPORTS_PER_SOL, 'SOL');
+    console.log('Total amount transferred (minus fees):', totalAmount / LAMPORTS_PER_SOL, 'SOL');
 
     // Validate the split payment
     await validateSplitPayment(transaction, totalAmount);
 
     // Calculate credits based on current rate
-    const credits = await calculateCreditsForAmount(totalAmount / solanaWeb3.LAMPORTS_PER_SOL);
+    const credits = await calculateCreditsForAmount(totalAmount / LAMPORTS_PER_SOL);
 
     // Find or create user and add credits
-    let user = await User.findOne({ publicKey: validatedKey });
+    let user = await User.findOne({ walletAddress: validatedKey });
     if (!user) {
-      console.log('Creating new user with publicKey:', validatedKey);
+      console.log('Creating new user with walletAddress:', validatedKey);
+      const username = `user_${validatedKey.substring(0, 8)}`;
       user = new User({
-        publicKey: validatedKey,
-        credits: 0,
-        pendingCredits: 0,
-        activeWishes: 0,
-        totalWishes: 0
+        username,
+        walletAddress: validatedKey,
+        credits: 0
       });
-    }
-    
-    // Add credits to user's balance
-    user.credits += credits;
-    
-    try {
       await user.save();
-      console.log('Credits added to user:', {
-        publicKey: validatedKey,
-        creditsAdded: credits,
-        newBalance: user.credits
-      });
-    } catch (saveError) {
-      console.error('Error saving user:', saveError);
-      if (saveError.code === 11000) {
-        return res.status(400).json({
-          success: false,
-          error: 'Public key already exists'
-        });
-      }
-      throw saveError;
     }
+    
+    // Add credits using the model's method
+    await user.addCredits(credits);
+    
+    console.log('Credits added to user:', {
+      walletAddress: validatedKey,
+      creditsAdded: credits,
+      newBalance: user.credits
+    });
 
     res.json({ 
       success: true, 
       credits: user.credits,
       transaction: {
         signature,
-        amount: totalAmount / solanaWeb3.LAMPORTS_PER_SOL,
-        prizePoolAmount: totalAmount * (process.env.PRIZE_POOL_PERCENTAGE / 100) / solanaWeb3.LAMPORTS_PER_SOL,
-        adminAmount: totalAmount * (process.env.ADMIN_PERCENTAGE / 100) / solanaWeb3.LAMPORTS_PER_SOL
+        amount: totalAmount / LAMPORTS_PER_SOL,
+        prizePoolAmount: totalAmount * (process.env.PRIZE_POOL_PERCENTAGE / 100) / LAMPORTS_PER_SOL,
+        adminAmount: totalAmount * (process.env.ADMIN_PERCENTAGE / 100) / LAMPORTS_PER_SOL
       }
     });
   } catch (error) {
@@ -308,12 +296,12 @@ exports.validateTransfer = async (req, res) => {
   }
 };
 
-exports.getTransactionStatus = async (req, res) => {
+export const getTransactionStatus = async (req, res) => {
   const { signature } = req.params;
 
   try {
-    const connection = new solanaWeb3.Connection(
-      process.env.SOLANA_RPC_URL || solanaWeb3.clusterApiUrl('devnet'),
+    const connection = new Connection(
+      process.env.SOLANA_RPC_URL || clusterApiUrl('devnet'),
       'confirmed'
     );
 

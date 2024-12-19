@@ -1,0 +1,77 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: wish-app-dev
+
+commonLabels:
+  environment: dev
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: backend-config
+    patch: |-
+      - op: replace
+        path: /data/NODE_ENV
+        value: development
+      - op: add
+        path: /data/DEBUG
+        value: "true"
+  
+  - target:
+      kind: ConfigMap
+      name: frontend-config
+    patch: |-
+      - op: replace
+        path: /data/VITE_DEBUG_MODE
+        value: "true"
+      - op: replace
+        path: /data/VITE_LOG_LEVEL
+        value: "debug"
+
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 128Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 256Mi
+
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 64Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 128Mi
+
+  - target:
+      kind: PersistentVolumeClaim
+      name: mongodb-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 512Mi
+
+  - target:
+      kind: PersistentVolumeClaim
+      name: redis-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 256Mi

@@ -1,5 +1,85 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
+// Schema pentru analiza AI
+const AnalysisSchema = new mongoose.Schema({
+  complexity: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 10
+  },
+  categories: [{
+    type: String,
+    required: true
+  }],
+  challenges: [{
+    type: String,
+    required: true
+  }],
+  suggestions: [{
+    type: String,
+    required: true
+  }],
+  resources: {
+    timeEstimate: String,
+    skillsRequired: [String],
+    toolsNeeded: [String]
+  }
+}, { _id: false });
+
+// Schema pentru pașii soluției
+const SolutionStepSchema = new mongoose.Schema({
+  order: {
+    type: Number,
+    required: true
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  timeEstimate: String,
+  dependencies: [String]
+}, { _id: false });
+
+// Schema pentru riscuri
+const RiskSchema = new mongoose.Schema({
+  description: {
+    type: String,
+    required: true
+  },
+  mitigation: {
+    type: String,
+    required: true
+  }
+}, { _id: false });
+
+// Schema pentru soluția AI
+const SolutionSchema = new mongoose.Schema({
+  steps: [SolutionStepSchema],
+  timeline: {
+    type: String,
+    required: true
+  },
+  resources: [String],
+  risks: [RiskSchema],
+  successCriteria: [String]
+}, { _id: false });
+
+// Schema pentru tokens folosiți
+const TokensUsedSchema = new mongoose.Schema({
+  analysis: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  solution: {
+    type: Number,
+    default: 0,
+    min: 0
+  }
+}, { _id: false });
+
+// Schema principală pentru dorințe
 const WishSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -10,90 +90,122 @@ const WishSchema = new mongoose.Schema({
   content: {
     type: String,
     required: true,
-    maxLength: 1000
-  },
-  creditsCost: {
-    type: Number,
-    required: true,
-    min: 0
+    trim: true,
+    minlength: 10,
+    maxlength: 1000
   },
   status: {
     type: String,
-    enum: ['pending', 'fulfilled', 'rejected'],
+    enum: ['pending', 'in_progress', 'completed', 'cancelled'],
     default: 'pending',
     index: true
   },
-  roundId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Round',
+  credits: {
+    type: Number,
     required: true,
-    index: true
+    min: 1
   },
-  fulfillmentDetails: {
-    rewardAmount: {
-      type: Number,
-      default: null
-    },
-    fulfillmentMessage: {
-      type: String,
-      default: null
-    },
-    transactionHash: {
-      type: String,
-      default: null
-    }
+  analysis: {
+    type: AnalysisSchema,
+    required: true
+  },
+  solution: {
+    type: SolutionSchema,
+    required: true
+  },
+  aiModel: {
+    type: String,
+    required: true,
+    default: 'openai/gpt-4'
+  },
+  tokensUsed: {
+    type: TokensUsedSchema,
+    default: () => ({})
   },
   createdAt: {
     type: Date,
     default: Date.now,
     index: true
   },
-  fulfilledAt: {
-    type: Date,
-    default: null
-  },
   updatedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  completedAt: Date,
+  cancelledAt: Date
 });
 
-// Update timestamps before saving
+// Middleware pre-save pentru actualizare timestamp
 WishSchema.pre('save', function(next) {
   this.updatedAt = new Date();
   
-  // If status is changing to fulfilled, set fulfilledAt
-  if (this.isModified('status') && this.status === 'fulfilled' && !this.fulfilledAt) {
-    this.fulfilledAt = new Date();
+  // Actualizare timestamps pentru status changes
+  if (this.isModified('status')) {
+    if (this.status === 'completed') {
+      this.completedAt = new Date();
+    } else if (this.status === 'cancelled') {
+      this.cancelledAt = new Date();
+    }
   }
   
   next();
 });
 
-// Calculate credits cost based on wish length
-WishSchema.pre('save', function(next) {
-  if (this.isNew) {
-    const length = this.content.length;
-    let cost = 0;
+// Metode statice
+WishSchema.statics.getActiveWishesCount = function(userId) {
+  return this.countDocuments({
+    user: userId,
+    status: 'pending'
+  });
+};
 
-    if (length <= 50) {
-      cost = Math.floor(length / 10);
-    } else if (length <= 100) {
-      cost = 5 + Math.floor((length - 50) / 10) * 2;
-    } else if (length <= 200) {
-      cost = 15 + Math.floor((length - 100) / 10) * 3;
-    } else {
-      cost = 45 + Math.floor((length - 200) / 10) * 5;
+WishSchema.statics.getTotalWishesCount = function(userId) {
+  return this.countDocuments({
+    user: userId
+  });
+};
+
+// Metode de instanță
+WishSchema.methods.updateStatus = async function(newStatus) {
+  const oldStatus = this.status;
+  this.status = newStatus;
+  
+  // Actualizare user stats
+  if (oldStatus !== newStatus) {
+    const User = mongoose.model('User');
+    const user = await User.findById(this.user);
+    
+    if (oldStatus === 'pending' && newStatus === 'completed') {
+      user.activeWishes -= 1;
+    } else if (oldStatus === 'completed' && newStatus === 'pending') {
+      user.activeWishes += 1;
     }
-
-    this.creditsCost = cost;
+    
+    await user.save();
   }
-  next();
+  
+  return this.save();
+};
+
+WishSchema.methods.addTokensUsed = function(type, count) {
+  if (!this.tokensUsed) {
+    this.tokensUsed = {};
+  }
+  this.tokensUsed[type] = (this.tokensUsed[type] || 0) + count;
+  return this.save();
+};
+
+// Virtual pentru total tokens
+WishSchema.virtual('totalTokensUsed').get(function() {
+  if (!this.tokensUsed) return 0;
+  return (this.tokensUsed.analysis || 0) + (this.tokensUsed.solution || 0);
 });
 
-// Add compound indexes
-WishSchema.index({ status: 1, createdAt: -1 });
-WishSchema.index({ roundId: 1, status: 1 });
+// Indexuri
 WishSchema.index({ user: 1, status: 1 });
+WishSchema.index({ createdAt: -1 });
+WishSchema.index({ 'analysis.complexity': 1 });
+WishSchema.index({ credits: 1 });
 
-module.exports = mongoose.model('Wish', WishSchema);
+const Wish = mongoose.model('Wish', WishSchema);
+export default Wish;

@@ -7,97 +7,8 @@ const TokenLoader = ({ onSuccess, onClose }) => {
   const { publicKey, sendTransaction } = useWallet();
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isRateLoading, setIsRateLoading] = useState(true);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [splits, setSplits] = useState({ prizePool: 0, admin: 0 });
-  const [rates, setRates] = useState(null);
-  const [expectedCredits, setExpectedCredits] = useState(0);
-  const [lastRateUpdate, setLastRateUpdate] = useState(null);
-
-  // Fetch current rates when component mounts and periodically
-  useEffect(() => {
-    const fetchRates = async () => {
-      try {
-        setError(''); // Clear any previous errors
-        setIsRateLoading(true);
-        
-        const response = await api.get('/api/rates/current');
-        
-        if (response.data.success) {
-          setRates(response.data.rates);
-          setLastRateUpdate(new Date());
-          console.log('Rates updated:', response.data.rates);
-        } else {
-          throw new Error(response.data.error || 'Failed to fetch rates');
-        }
-      } catch (error) {
-        console.error('Error fetching rates:', error);
-        // Check if it's an authentication error
-        if (error.response?.status === 401) {
-          setError('Vă rugăm să vă reconectați portofelul');
-        } else {
-          setError('Nu s-au putut încărca ratele curente. Vă rugăm încercați din nou.');
-        }
-        setRates(null);
-      } finally {
-        setIsRateLoading(false);
-      }
-    };
-
-    // Initial fetch
-    fetchRates();
-
-    // Refresh rates every 10 seconds
-    const interval = setInterval(fetchRates, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Get transaction from backend to get accurate credit estimate
-  const getTransactionEstimate = async (amount) => {
-    if (!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
-
-    try {
-      const response = await api.post('/api/transactions/create', {
-        amount: parseFloat(amount),
-        publicKey: publicKey.toString()
-      });
-
-      if (response.data.success) {
-        setSplits(response.data.splits);
-        setExpectedCredits(response.data.expectedCredits);
-      }
-    } catch (error) {
-      console.error('Error getting estimate:', error);
-      if (error.response?.status === 401) {
-        setError('Vă rugăm să vă reconectați portofelul');
-      }
-    }
-  };
-
-  // Update estimates when amount changes
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (amount) {
-        getTransactionEstimate(amount);
-      } else {
-        setSplits({ prizePool: 0, admin: 0 });
-        setExpectedCredits(0);
-      }
-    }, 500); // Delay by 500ms to avoid too many requests
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [amount, publicKey]);
-
-  const checkTransactionStatus = async (signature) => {
-    try {
-      const response = await api.get(`/api/transactions/status/${signature}`);
-      return response.data.status === 'confirmed';
-    } catch (error) {
-      console.error('Error checking transaction status:', error);
-      return false;
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -124,43 +35,30 @@ const TokenLoader = ({ onSuccess, onClose }) => {
         throw new Error(createResponse.data.error || 'Eroare la crearea tranzacției');
       }
 
-      // Update split information and expected credits from server response
-      setSplits(createResponse.data.splits);
-      setExpectedCredits(createResponse.data.expectedCredits);
+      setStatus('Se solicită semnătura...');
 
-      // Deserialize the transaction
+      // Deserialize and send transaction
       const transaction = Transaction.from(
         Buffer.from(createResponse.data.transaction, 'base64')
       );
 
-      setStatus('Se solicită semnătura...');
-
-      // Send transaction
       const signature = await sendTransaction(transaction, connection);
       console.log('Transaction sent, signature:', signature);
       
       setStatus('Se confirmă tranzacția...');
 
       // Wait for confirmation
-      let confirmed = false;
-      for (let i = 0; i < 30 && !confirmed; i++) {
-        confirmed = await checkTransactionStatus(signature);
-        if (!confirmed) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      if (!confirmed) {
-        throw new Error('Timpul de confirmare a tranzacției a expirat');
+      const confirmation = await connection.confirmTransaction(signature);
+      if (confirmation.value.err) {
+        throw new Error('Tranzacția a eșuat');
       }
 
       setStatus('Se validează tranzacția...');
 
       // Validate transaction with backend
-      console.log('Validating transaction:', signature);
       const validateResponse = await api.post('/api/transactions/validate', {
-        publicKey: publicKey.toString(),
-        signature
+        signature,
+        publicKey: publicKey.toString()
       });
 
       if (validateResponse.data.success) {
@@ -173,11 +71,7 @@ const TokenLoader = ({ onSuccess, onClose }) => {
 
     } catch (err) {
       console.error('Token loading error:', err);
-      if (err.response?.status === 401) {
-        setError('Vă rugăm să vă reconectați portofelul');
-      } else {
-        setError(err.response?.data?.error || err.message || 'Eroare la încărcarea tokenurilor');
-      }
+      setError(err.message || 'Eroare la încărcarea tokenurilor');
       setStatus('');
     } finally {
       setIsLoading(false);
@@ -201,9 +95,6 @@ const TokenLoader = ({ onSuccess, onClose }) => {
             placeholder="Introduceți suma în SOL"
             disabled={isLoading}
           />
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Suma introdusă va fi împărțită: {rates?.splits.prizePool}% fond premii, {rates?.splits.admin}% administrare
-          </p>
         </div>
 
         {error && (
@@ -218,47 +109,16 @@ const TokenLoader = ({ onSuccess, onClose }) => {
           </div>
         )}
 
-        {rates && (
-          <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 p-3 rounded-md">
-            <div className="flex justify-between items-center mb-2">
-              <p className="font-medium">Rata Curentă:</p>
-              {lastRateUpdate && (
-                <span className="text-xs text-gray-500">
-                  Actualizat: {lastRateUpdate.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
-            <p>1 SOL = {Number(rates.solToCredits)} Credite</p>
-            {amount && !isNaN(amount) && (
-              <p className="mt-1">
-                Credite Estimate: {expectedCredits}
-                {isRateLoading && <span className="ml-2 text-xs">(se actualizează...)</span>}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          <p>Distribuție:</p>
-          <ul className="list-disc list-inside">
-            <li>Fond de Premii ({rates?.splits.prizePool}%): {splits.prizePool} SOL</li>
-            <li>Administrare ({rates?.splits.admin}%): {splits.admin} SOL</li>
-          </ul>
-          <p className="mt-2 text-xs text-gray-500">
-            * Suma totală ce va fi dedusă: {amount ? Number(amount).toFixed(2) : '0'} SOL
-          </p>
-        </div>
-
         <button
           type="submit"
-          disabled={isLoading || !rates}
+          disabled={isLoading}
           className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors ${
-            isLoading || !rates
+            isLoading
               ? 'bg-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700'
           }`}
         >
-          {isLoading ? 'Se procesează...' : rates ? 'Încarcă Tokenuri' : 'Se încarcă ratele...'}
+          {isLoading ? 'Se procesează...' : 'Încarcă SOL'}
         </button>
       </form>
     </div>

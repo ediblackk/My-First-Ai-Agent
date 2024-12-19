@@ -1,10 +1,12 @@
-const express = require('express');
+import express from 'express';
+import { createTransaction, validateTransfer, getTransactionStatus } from '../controllers/transactionController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+
 const router = express.Router();
-const { validateTransfer, getTransactionStatus, createTransaction } = require('../controllers/transactionController');
 
-// Public routes (these need to be public for wallet integration)
-router.post('/create', createTransaction);
-router.post('/validate', validateTransfer);
-router.get('/status/:signature', getTransactionStatus);
+// Both routes require authentication
+router.post('/create', authMiddleware, createTransaction);
+router.post('/validate', authMiddleware, validateTransfer);
+router.get('/status/:signature', authMiddleware, getTransactionStatus);
 
-module.exports = router;
+export { router };
