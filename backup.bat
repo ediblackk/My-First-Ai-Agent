@@ -33,6 +33,40 @@ if %errorlevel% neq 0 (
     git config user.name "!GIT_NAME!" || goto :error
     git config user.email "!GIT_EMAIL!" || goto :error
     
+    echo [%time%] Creating .gitignore...
+    (
+        echo # Dependencies
+        echo node_modules/
+        echo .pnp
+        echo .pnp.js
+        echo 
+        echo # Testing
+        echo coverage/
+        echo 
+        echo # Production
+        echo build/
+        echo dist/
+        echo 
+        echo # Environment
+        echo .env
+        echo .env.local
+        echo .env.*.local
+        echo 
+        echo # Logs
+        echo logs/
+        echo *.log
+        echo npm-debug.log*
+        echo 
+        echo # Editor
+        echo .vscode/
+        echo .idea/
+        echo *.swp
+        echo 
+        echo # OS
+        echo .DS_Store
+        echo Thumbs.db
+    ) > .gitignore
+    
     echo [%time%] Initializing Git repository...
     git init || goto :error
     
@@ -100,6 +134,10 @@ git push origin v%VERSION% || goto :error
 echo [%time%] Returning to main branch...
 git checkout main || goto :error
 
+:: Push main branch changes
+echo [%time%] Pushing main branch changes...
+git push origin main || goto :error
+
 :: Increment version
 for /f "tokens=1,2 delims=." %%a in ("%VERSION%") do (
     set /a NEW_MINOR=%%b+1
@@ -113,6 +151,7 @@ echo !NEW_VERSION!>version.txt
 echo [%time%] Backup complete!
 echo [%time%] Created branch: %BACKUP_BRANCH%
 echo [%time%] Created tag: v%VERSION%
+echo [%time%] Pushed main branch changes
 goto :end
 
 :error
