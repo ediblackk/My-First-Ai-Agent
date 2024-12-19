@@ -1,6 +1,6 @@
 # Changelog - Admin System Simplification
 
-## Changes Made
+## Changes Made (19 Dec 2024)
 1. Simplified admin authentication flow:
    - Removed redundant role/permission system
    - Using single isAdmin flag throughout
@@ -38,3 +38,8 @@
 - ADMIN_WALLETS must be set in .env
 - JWT_SECRET must be set in .env
 - MONGODB_URI must be set in .env
+
+## Testing Notes
+- Tested with admin wallet: 3nCTFSM2qPqKdgidGJhecNhw1avQ3oLL5wythQr7UVPh
+- Verified admin dashboard access
+- Confirmed stats loading correctly
