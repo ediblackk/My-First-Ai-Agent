@@ -1,141 +1,52 @@
 @echo off
-echo Starting cleanup process...
+setlocal EnableDelayedExpansion
+echo [%time%] Starting cleanup process...
 
-set PROJECT_DIR=%~dp0
-echo Working directory: %PROJECT_DIR%
+:: Change to project directory
+cd /d "%~dp0"
+echo [%time%] Working directory: %CD%
 
-:STEP1
-echo.
-set /p DO_BACKUP="Step 1: Create backup? (y/n): "
-if /i "%DO_BACKUP%"=="y" (
-    echo Creating backup...
-    xcopy /E /I /Y . ..\my-first-project-backup
-    echo Backup complete.
-)
+echo [%time%] Starting cleanup based on simplified approach...
 
-:STEP2
-echo.
-set /p DO_CLEANUP="Step 2: Remove unnecessary directories and files? (y/n): "
-if /i "%DO_CLEANUP%"=="y" (
-    echo Removing directories...
-    rmdir /S /Q "%PROJECT_DIR%express\k6"
-    rmdir /S /Q "%PROJECT_DIR%express\monitoring"
-    rmdir /S /Q "%PROJECT_DIR%express\scripts"
+:: Kubernetes (not needed)
+echo [%time%] Removing Kubernetes files...
+rmdir /s /q k8s 2>nul
+del /f /q deploy-k8s.ps1 2>nul
+del /f /q install-k8s.bat 2>nul
+del /f /q setup-k8s.ps1 2>nul
 
-    echo Simplifying Cypress...
-    rmdir /S /Q "%PROJECT_DIR%vite-project\cypress\e2e\admin-flow\system-monitoring.cy.js"
-    rmdir /S /Q "%PROJECT_DIR%vite-project\cypress\component"
-    del /F /Q "%PROJECT_DIR%vite-project\cypress.config.js"
-    del /F /Q "%PROJECT_DIR%vite-project\lighthouserc.js"
-    echo Directory cleanup complete.
-)
+:: Complex testing (keeping Cypress and Jest)
+echo [%time%] Removing complex testing files...
+del /f /q vite-project/lighthouserc.js 2>nul
+rmdir /s /q express/k6 2>nul
+rmdir /s /q express/monitoring 2>nul
 
-:STEP3
-echo.
-set /p DO_CONFIG="Step 3: Replace configuration files? (y/n): "
-if /i "%DO_CONFIG%"=="y" (
-    echo Replacing configuration files...
-    copy /Y "%PROJECT_DIR%express\package.json.simplified" "%PROJECT_DIR%express\package.json"
-    copy /Y "%PROJECT_DIR%vite-project\package.json.simplified" "%PROJECT_DIR%vite-project\package.json"
-    copy /Y "%PROJECT_DIR%docker-compose.simplified.yml" "%PROJECT_DIR%docker-compose.yml"
+:: Documentation cleanup (keeping core docs)
+echo [%time%] Cleaning up documentation...
+del /f /q performance_testing.md 2>nul
 
-    echo Creating simplified Cypress config...
-    (
-    echo {
-    echo   "baseUrl": "http://localhost:3000",
-    echo   "supportFile": "cypress/support/e2e.js",
-    echo   "specPattern": "cypress/e2e/**/*.cy.{js,jsx}",
-    echo   "viewportWidth": 1280,
-    echo   "viewportHeight": 720,
-    echo   "video": false
-    echo }
-    ) > "%PROJECT_DIR%vite-project\cypress.config.js"
-    echo Configuration files replaced.
-)
+:: Scripts cleanup
+echo [%time%] Removing unused scripts...
+del /f /q express/scripts/security-scan.js 2>nul
 
-:STEP4
-echo.
-set /p DO_DEPS="Step 4: Clean and reinstall dependencies? (y/n): "
-if /i "%DO_DEPS%"=="y" (
-    cd "%PROJECT_DIR%express"
-    echo Cleaning express node_modules...
-    rmdir /S /Q node_modules
-    del /F /Q package-lock.json
-    call npm install
-    if errorlevel 1 (
-        echo Error installing express dependencies
-        pause
-        exit /b 1
-    )
+:: Storybook (not needed for basic UI)
+echo [%time%] Removing Storybook...
+rmdir /s /q vite-project/.storybook 2>nul
+del /f /q vite-project/src/components/wishes/CreateWish.stories.jsx 2>nul
 
-    cd "%PROJECT_DIR%vite-project"
-    echo Cleaning vite-project node_modules...
-    rmdir /S /Q node_modules
-    del /F /Q package-lock.json
-    call npm install
-    if errorlevel 1 (
-        echo Error installing vite-project dependencies
-        pause
-        exit /b 1
-    )
+:: Docker simplification
+echo [%time%] Cleaning up Docker files...
+del /f /q docker-compose.simplified.yml 2>nul
 
-    cd "%PROJECT_DIR%"
-    echo Dependencies reinstalled.
-)
+echo [%time%] Files to keep:
+echo - Cypress for basic flows
+echo - Jest for simple logic
+echo - Basic error tracking
+echo - Console logs for debugging
+echo - Core documentation
+echo - Essential Docker files
 
-:STEP5
-echo.
-set /p DO_DOCKER="Step 5: Clean and rebuild Docker containers? (y/n): "
-if /i "%DO_DOCKER%"=="y" (
-    echo Checking Docker...
-    echo Verifying Docker Desktop is running...
-    tasklist /FI "IMAGENAME eq Docker Desktop.exe" 2>NUL | find /I /N "Docker Desktop.exe">NUL
-    if "%ERRORLEVEL%"=="1" (
-        echo Docker Desktop is not running.
-        echo Please start Docker Desktop and wait for it to be ready.
-        echo Press any key when Docker Desktop is running...
-        pause > nul
-    )
-
-    echo Starting Docker cleanup...
-    docker info > nul 2>&1
-    if errorlevel 1 (
-        echo Docker is not responding. Please ensure Docker Desktop is running and try again.
-        pause
-        exit /b 1
-    )
-
-    echo Docker is running. Proceeding with cleanup...
-    docker-compose down -v
-    for /f "tokens=*" %%i in ('docker images -q "ssb_*"') do docker rmi %%i
-    docker-compose up -d --build
-
-    echo Docker containers rebuilt. Checking status...
-    timeout /t 20 /nobreak
-    docker-compose ps
-)
-
-:STEP6
-echo.
-set /p DO_CLEANUP_TEMP="Step 6: Remove temporary files? (y/n): "
-if /i "%DO_CLEANUP_TEMP%"=="y" (
-    echo Removing temporary files...
-    del /F /Q "%PROJECT_DIR%express\package.json.simplified"
-    del /F /Q "%PROJECT_DIR%vite-project\package.json.simplified"
-    del /F /Q "%PROJECT_DIR%docker-compose.simplified.yml"
-)
-
-echo.
-echo Cleanup process complete!
-echo.
-echo Final system state:
-echo Checking directories...
-dir "%PROJECT_DIR%express"
-echo.
-dir "%PROJECT_DIR%vite-project"
-echo.
-echo Checking Docker containers...
-docker-compose ps
-echo.
-echo All steps completed. Press any key to exit...
-pause > nul
+echo [%time%] Cleanup complete!
+echo [%time%] Please review changes and run backup.bat to create a new backup.
+pause
+endlocal

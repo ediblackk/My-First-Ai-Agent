@@ -6,22 +6,22 @@ const StatCard = ({ title, value, description, loading, error }) => (
     <div className="p-5">
       <div className="flex items-center">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+          <div className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
             {title}
-          </p>
-          <p className="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">
+          </div>
+          <div className="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">
             {loading ? (
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-24 animate-pulse"></div>
+              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-24 animate-pulse" />
             ) : error ? (
               <span className="text-red-500 text-sm">Eroare la încărcare</span>
             ) : (
               value
             )}
-          </p>
+          </div>
           {description && (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {description}
-            </p>
+            </div>
           )}
         </div>
       </div>
@@ -124,7 +124,7 @@ const StatsSection = () => {
                 Eroare la încărcarea statisticilor
               </h3>
               <div className="mt-2 text-sm text-red-700 dark:text-red-300">
-                <p>{error}</p>
+                {error}
               </div>
             </div>
           </div>

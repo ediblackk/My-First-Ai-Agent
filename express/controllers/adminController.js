@@ -6,17 +6,17 @@ import Wish from '../models/wish.js';
 // Verificare admin
 export const verifyAdmin = async (req, res) => {
   try {
-    const { publicKey } = req.body;
+    const { walletAddress } = req.body;
 
-    if (!publicKey) {
+    if (!walletAddress) {
       return res.status(400).json({
         success: false,
-        error: 'Public key necesar'
+        error: 'Wallet address necesar'
       });
     }
 
     // Verifică dacă wallet-ul este în lista de admin
-    const isAdmin = adminConfig.adminWallets.includes(publicKey);
+    const isAdmin = adminConfig.adminWallets.includes(walletAddress);
     if (!isAdmin) {
       return res.status(403).json({
         success: false,
@@ -24,9 +24,18 @@ export const verifyAdmin = async (req, res) => {
       });
     }
 
+    // Verifică dacă utilizatorul există
+    let user = await User.findOne({ walletAddress });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'Utilizator negăsit'
+      });
+    }
+
     res.json({
       success: true,
-      role: 'SUPER_ADMIN', // Temporar, până implementăm roluri în DB
+      role: 'SUPER_ADMIN',
       permissions: adminConfig.roles.SUPER_ADMIN.permissions
     });
   } catch (error) {
@@ -46,7 +55,7 @@ export const getUsers = async (req, res) => {
 
     let query = {};
     if (search) {
-      query.publicKey = new RegExp(search, 'i');
+      query.walletAddress = new RegExp(search, 'i');
     }
 
     const users = await User.find(query)
@@ -128,7 +137,7 @@ export const modifyUserCredits = async (req, res) => {
     // Log acțiune
     await AdminLog.logAction(
       'USER_CREDIT_MODIFY',
-      req.admin.publicKey,
+      req.admin.walletAddress,
       {
         userId: user._id,
         amount,
@@ -178,7 +187,7 @@ export const updateUserRole = async (req, res) => {
     // Log acțiune
     await AdminLog.logAction(
       'USER_ROLE_CHANGE',
-      req.admin.publicKey,
+      req.admin.walletAddress,
       {
         userId: user._id,
         oldRole: user.role,
@@ -239,12 +248,12 @@ export const updateConfig = async (req, res) => {
       });
     }
 
-    const config = await Config.updateConfig(key, value, req.admin.publicKey);
+    const config = await Config.updateConfig(key, value, req.admin.walletAddress);
 
     // Log acțiune
     await AdminLog.logAction(
       'CONFIG_CHANGE',
-      req.admin.publicKey,
+      req.admin.walletAddress,
       {
         key,
         oldValue: config.value,
@@ -290,13 +299,13 @@ export const updateAIConfig = async (req, res) => {
 
     if (model) {
       updates.push(
-        Config.updateConfig('AI_MODEL', model, req.admin.publicKey)
+        Config.updateConfig('AI_MODEL', model, req.admin.walletAddress)
       );
     }
 
     if (maxTokens) {
       updates.push(
-        Config.updateConfig('AI_MAX_TOKENS', maxTokens, req.admin.publicKey)
+        Config.updateConfig('AI_MAX_TOKENS', maxTokens, req.admin.walletAddress)
       );
     }
 
@@ -305,7 +314,7 @@ export const updateAIConfig = async (req, res) => {
     // Log acțiune
     await AdminLog.logAction(
       'AI_CONFIG_CHANGE',
-      req.admin.publicKey,
+      req.admin.walletAddress,
       { model, maxTokens },
       req
     );

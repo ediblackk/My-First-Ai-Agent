@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import AdminService from '../services/adminService';
+import { useAuth } from '../WalletProviderWrapper';
 
 // Import componente admin
 import ConfigSection from '../components/admin/ConfigSection';
@@ -10,63 +10,19 @@ import SystemSection from '../components/admin/SystemSection';
 
 const AdminDashboard = () => {
   const { publicKey, connected } = useWallet();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { isAdmin } = useAuth();
   const [activeSection, setActiveSection] = useState('stats');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // Verificare admin la conectare
-  useEffect(() => {
-    const verifyAdmin = async () => {
-      if (!connected || !publicKey) {
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await AdminService.verifyAdmin(publicKey.toString());
-        setIsAdmin(response.success);
-      } catch (err) {
-        console.error('Admin verification error:', err);
-        setError(err.message);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    verifyAdmin();
-  }, [connected, publicKey]);
-
-  // Render loading state
-  if (loading) {
+  // Render unauthorized state
+  if (!connected || !publicKey) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
         <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse flex space-x-4">
-            <div className="flex-1 space-y-4 py-1">
-              <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-3/4"></div>
-              <div className="space-y-2">
-                <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded"></div>
-                <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-5/6"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Render error state
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 px-4 py-3 rounded relative" role="alert">
-            <strong className="font-bold">Eroare! </strong>
-            <span className="block sm:inline">{error}</span>
+          <div className="bg-yellow-100 dark:bg-yellow-900 border border-yellow-400 text-yellow-700 dark:text-yellow-200 px-4 py-3 rounded relative" role="alert">
+            <strong className="font-bold">Acces interzis! </strong>
+            <span className="block sm:inline">
+              Conectați-vă cu un portofel de administrator.
+            </span>
           </div>
         </div>
       </div>
@@ -81,9 +37,7 @@ const AdminDashboard = () => {
           <div className="bg-yellow-100 dark:bg-yellow-900 border border-yellow-400 text-yellow-700 dark:text-yellow-200 px-4 py-3 rounded relative" role="alert">
             <strong className="font-bold">Acces interzis! </strong>
             <span className="block sm:inline">
-              {connected 
-                ? 'Nu aveți permisiuni de administrator.'
-                : 'Conectați-vă cu un portofel de administrator.'}
+              Nu aveți permisiuni de administrator.
             </span>
           </div>
         </div>

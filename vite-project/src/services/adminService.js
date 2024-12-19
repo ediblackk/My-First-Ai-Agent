@@ -1,12 +1,6 @@
 import api from '../utils/axios';
 
 class AdminService {
-  // Autentificare
-  static async verifyAdmin(publicKey) {
-    const response = await api.post('/api/admin/auth/verify', { publicKey });
-    return response.data;
-  }
-
   // Utilizatori
   static async getUsers(page = 1, limit = 10, search = '') {
     const response = await api.get('/api/admin/users', {

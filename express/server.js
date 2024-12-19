@@ -8,7 +8,22 @@ import { router as adminRoutes } from './routes/adminRoutes.js';
 import { router as statsRoutes } from './routes/statsRoutes.js';
 import { router as transactionRoutes } from './routes/transactionRoutes.js';
 
+// Load environment variables before any other imports
 dotenv.config();
+
+// Verify critical environment variables
+const requiredEnvVars = ['JWT_SECRET', 'ADMIN_WALLETS', 'MONGODB_URI'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error('Missing required environment variables:', missingEnvVars);
+  process.exit(1);
+}
+
+console.log('\n=== Server Configuration ===');
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Admin wallets:', process.env.ADMIN_WALLETS);
+console.log('JWT secret:', process.env.JWT_SECRET ? '[SET]' : '[NOT SET]');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -16,6 +31,15 @@ const port = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log('\n=== Incoming Request ===');
+  console.log('Method:', req.method);
+  console.log('Path:', req.path);
+  console.log('Headers:', req.headers);
+  next();
+});
 
 // Routes
 app.use('/api/users', userRoutes);
@@ -31,7 +55,7 @@ app.get('/health', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Error:', err);
   res.status(500).json({ 
     success: false, 
     error: err.message || 'Internal server error'
@@ -39,7 +63,7 @@ app.use((err, req, res, next) => {
 });
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/wishdb')
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
     app.listen(port, () => {
